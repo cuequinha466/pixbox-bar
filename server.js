@@ -97,7 +97,7 @@ async function createPixCharge(session) {
       description: 'Pixbox — 1 música',
       payment_method_id: 'pix',
       external_reference: session.id,
-      payer: { email: 'cliente@pixbox.app' },
+      payer: { email: 'cuequinha466@gmail.com' },
     }, {
       headers: {
         Authorization: `Bearer ${MP_ACCESS_TOKEN}`,
