@@ -97,8 +97,14 @@ async function createPixCharge(session) {
       description: 'Pixbox — 1 música',
       payment_method_id: 'pix',
       external_reference: session.id,
-      payer: { email: 'cuequinha466@gmail.com' },
-    }, {
+      payer: {
+        email: 'cuequinha466@gmail.com',
+        first_name: 'Flavia',
+        last_name: 'Pires',
+        identification: {
+          type: 'CPF',
+          number: '184.139.907-85'
+        }, {
       headers: {
         Authorization: `Bearer ${MP_ACCESS_TOKEN}`,
         'Content-Type': 'application/json',
