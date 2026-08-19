@@ -99,7 +99,7 @@ async function createPixCharge(session) {
     description: 'Pixbox Bar — 1 música',
     payment_method_id: 'pix',
     external_reference: session.id,
-    payer: { email:'cliente@pixbox.app' },
+    payer: { email: 'guest@gmail.com' },
   }, { headers:{ Authorization:`Bearer ${MP_ACCESS_TOKEN}`, 'Content-Type':'application/json', 'X-Idempotency-Key':session.id } });
   const d = res.data;
   return { mpId:String(d.id), brcode:d.point_of_interaction.transaction_data.qr_code, qrBase64:d.point_of_interaction.transaction_data.qr_code_base64||null, mock:false };
