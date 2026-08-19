@@ -8,6 +8,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Monoton&family=DM+Mono:wght@400;500&family=Bricolage+Grotesque:wght@400;600;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<!-- SDK Mercado Pago V2 — device ID -->
+<script src="https://sdk.mercadopago.com/js/v2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#120308;--bg-2:#1c0612;--cream:#f4e8d0;--cream-dim:#f4e8d099;--neon:#ff2d6f;--amber:#ffb347;--green:#5fff8f;--line:#f4e8d022}
@@ -116,7 +118,19 @@ footer{margin-top:32px;text-align:center;font-size:10px;letter-spacing:.3em;colo
 let sessionId=null;
 const $=id=>document.getElementById(id);
 const showStage=id=>{document.querySelectorAll('.stage').forEach(s=>s.classList.remove('active'));$(id).classList.add('active')};
+
+// Inicializa SDK do MP para device ID (resolve item obrigatório de qualidade)
+async function initMP() {
+  try {
+    const cfg = await fetch('/api/mp-config').then(r=>r.json());
+    if (cfg.publicKey) {
+      window._mp = new MercadoPago(cfg.publicKey);
+    }
+  } catch(e) {}
+}
+
 async function init(){
+  await initMP();
   try{
     const r=await fetch('/api/sessions',{method:'POST'});
     const data=await r.json();
