@@ -19,7 +19,8 @@ const BLOCK_EXPLICIT    = process.env.BLOCK_EXPLICIT === 'true';
 const FORCE_MOCK        = process.env.FORCE_MOCK === 'true';
 const TOKENS_FILE       = path.join(__dirname, '.tokens.json');
 const MP_ACCESS_TOKEN   = process.env.MP_ACCESS_TOKEN;
-const MP_CLIENT_ID      = process.env.MP_CLIENT_ID || '7965849569201745';
+const MP_PUBLIC_KEY     = process.env.MP_PUBLIC_KEY || '';
+const WEBHOOK_URL       = process.env.WEBHOOK_URL || 'https://bar.pixbox.space/api/webhooks/pix';
 
 const BLOCKED_ARTISTS = [
   'mc kevin o chris','kevin o chris','mc ryan sp','mc cabelinho','matuê','matue',
@@ -36,6 +37,9 @@ const BLOCKED_ARTISTS = [
   'mc negão original','mc negao original','mc kako','mc kadu',
   'mc jvila','mc j vila','mc lele jp','mc gury','mc l da vinte','mc du black',
 ];
+
+const FUNK_GENRES = ['funk','funk carioca','funk ostentacao','funk melody','passinho','baile funk','funk brasileiro'];
+
 function norm(s) { return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
 function isBlockedArtist(artists) {
   const names = artists.map(a => norm(a.name));
@@ -94,22 +98,24 @@ async function createPixCharge(session) {
   try {
     const res = await axios.post('https://api.mercadopago.com/v1/payments', {
       transaction_amount: session.amount / 100,
-      description: 'Pixbox — 1 música',
+      description: 'Pixbox Bar — 1 música',
       payment_method_id: 'pix',
       external_reference: session.id,
+      notification_url: WEBHOOK_URL,
       payer: {
-        email: 'cuequinha466@gmail.com',
-        first_name: 'Flavia',
-        last_name: 'Pires',
+        email: 'cliente@pixbox.app',
+        first_name: 'Cliente',
+        last_name: 'Pixbox',
         identification: {
           type: 'CPF',
-          number: '184.139.907-85'
-        }, {
+          number: '19119119100'
+        }
+      },
+    }, {
       headers: {
         Authorization: `Bearer ${MP_ACCESS_TOKEN}`,
         'Content-Type': 'application/json',
         'X-Idempotency-Key': session.id,
-        'X-Platform-Id': MP_CLIENT_ID,
       }
     });
     const d = res.data;
@@ -148,8 +154,12 @@ function startPixPolling() {
   console.log('[poll] Polling ativo (3s).');
 }
 
+// Endpoint pra frontend buscar a public key do MP
+app.get('/api/mp-config', (req, res) => {
+  res.json({ publicKey: MP_PUBLIC_KEY });
+});
+
 app.get('/api/spotify/login', (req,res) => {
-  if (!SPOTIFY_CLIENT_ID) return res.status(500).send('SPOTIFY_CLIENT_ID não configurado.');
   const params = new URLSearchParams({ response_type:'code', client_id:SPOTIFY_CLIENT_ID, scope:'user-modify-playback-state user-read-playback-state user-read-currently-playing', redirect_uri:SPOTIFY_REDIRECT_URI });
   res.redirect(`https://accounts.spotify.com/authorize?${params}`);
 });
@@ -209,7 +219,7 @@ app.post('/api/webhooks/pix', async (req,res) => {
     const r = await axios.get(`https://api.mercadopago.com/v1/payments/${id}`, { headers:{ Authorization:`Bearer ${MP_ACCESS_TOKEN}` } });
     if (r.data.status === 'approved') {
       const session = sessions.get(mpIdToSession.get(String(id))) || sessions.get(r.data.external_reference);
-      if (session && session.status === 'awaiting_payment') { session.status='paid'; }
+      if (session && session.status === 'awaiting_payment') { session.status='paid'; console.log('[webhook] ✓ Pago:', session.id); }
     }
   } catch(e) { console.error('[webhook]',e.message); }
 });
@@ -225,14 +235,29 @@ app.get('/api/sessions/:id/search', async (req,res) => {
     if (!r.ok) return res.status(500).json({ error:await r.text() });
     const data = await r.json();
     const maxMs = MAX_SONG_DURATION_MIN*60_000;
+
+    const artistIds = [...new Set(data.tracks.items.flatMap(t=>t.artists.map(a=>a.id)))];
+    let artistGenres = {};
+    if (artistIds.length > 0) {
+      try {
+        const ar = await spotifyFetch(`/artists?ids=${artistIds.slice(0,50).join(',')}`);
+        if (ar.ok) { const ad = await ar.json(); ad.artists.forEach(a=>{ if(a) artistGenres[a.id]=a.genres||[]; }); }
+      } catch(e) {}
+    }
+
     const tracks = data.tracks.items
       .filter(t => t.duration_ms <= maxMs)
-      .filter(t => !(BLOCK_EXPLICIT && t.explicit))
+      .filter(t => !t.explicit)
       .filter(t => !isBlockedArtist(t.artists))
+      .filter(t => {
+        const genres = t.artists.flatMap(a=>artistGenres[a.id]||[]).map(g=>norm(g));
+        return !genres.some(g => FUNK_GENRES.some(f=>g.includes(norm(f))));
+      })
       .map(t => ({ id:t.id, uri:t.uri, name:t.name, artists:t.artists.map(a=>a.name).join(', '), album:t.album.name, duration_ms:t.duration_ms, explicit:t.explicit, image:t.album.images.find(i=>i.width<=300)?.url||t.album.images.at(-1)?.url||null }));
     res.json({ tracks });
   } catch(e) { res.status(500).json({ error:e.message }); }
 });
+
 app.post('/api/sessions/:id/queue', async (req,res) => {
   const s = sessions.get(req.params.id);
   if (!s) return res.status(404).json({ error:'sessão não encontrada' });
@@ -274,9 +299,8 @@ app.get('/api/host/stats', (req,res) => {
 
 loadTokens(); startTokenKeepAlive(); startPixPolling();
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n🎵 Pixbox rodando — http://127.0.0.1:${PORT}\n`);
+  console.log(`\n🎵 Pixbox BAR rodando — http://127.0.0.1:${PORT}\n`);
   if (!MP_ACCESS_TOKEN) console.log('   ⚠ MP_ACCESS_TOKEN não configurado.\n');
-  if (FORCE_MOCK)       console.log('   ⚠ FORCE_MOCK ativo.\n');
-  if (BLOCK_EXPLICIT)   console.log('   ✓ Filtro explícitos ativo.\n');
-  console.log(`   ✓ Lista negra: ${BLOCKED_ARTISTS.length} artistas.\n`);
+  if (FORCE_MOCK) console.log('   ⚠ FORCE_MOCK ativo.\n');
+  console.log(`   ✓ Filtro funk + lista negra ativos.\n`);
 });
